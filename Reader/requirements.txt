@@ -1,0 +1,6 @@
+matplotlib
+pandas
+torch
+numpy
+bs4
+transformers

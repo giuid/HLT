@@ -1,0 +1,150 @@
+# Installare i pacchetti necessari
+sudo apt-get update
+sudo apt-get install curl jq
+
+# Verificare la comunicazione con il server ElasticSearch.
+curl -X GET "http://localhost:9200?pretty"
+
+#Arrestare il servizio ElasticSearch.
+systemctl stop elasticsearch
+
+#Creare una directory locale per archiviare snapshot.
+mkdir /backup
+chown -R elasticsearch:elasticsearch /backup
+
+#Modificare il file di configurazione elasticSearch denominato: elasticsearch.yml
+vi /etc/elasticsearch/elasticsearch.yml
+#NB: la cartella etc si trova nella root del sistema, il file estaicsearch.yml è modificabile con blocconote
+
+#Aggiungere la riga seguente alla fine del file.
+path.repo: ["/backup"]
+
+#Ecco il file originale, prima della nostra configurazione.
+path.data: /var/lib/elasticsearch
+path.logs: /var/log/elasticsearch
+network.host: 0
+cluster.initial_master_nodes: elasticsearch.local
+
+#Ecco il file con la nostra configurazione.
+path.data: /var/lib/elasticsearch
+path.logs: /var/log/elasticsearch
+network.host: 0
+cluster.initial_master_nodes: elasticsearch.local
+path.repo: ["/backup"]
+
+#Avviare Elasticsearch
+systemctl start elasticsearch
+
+#Registrare un nuovo repository snapshot denominato BACKUP.
+curl -X PUT "http://localhost:9200/_snapshot/backup?pretty" -H 'Content-Type: application/json' -d'
+{
+    "type": "fs",
+    "settings": {
+        "location": "/backup",
+        "compress": true
+    }
+}
+'
+
+#Ecco l'output del comando:
+{
+  "acknowledged" : true
+}
+
+#Elencare tutti i repository di snapshot.
+curl -X GET "http://localhost:9200/_snapshot/_all?pretty"
+
+#Ecco l'output del comando:
+{
+  "backup" : {
+    "type" : "fs",
+    "settings" : {
+      "compress" : "true",
+      "location" : "/backup"
+    }
+  }
+}
+
+#Per creare uno snapshot di un indice ElasticSearch specifico DA TERMINALE, utilizzare il comando seguente.
+curl -X PUT "http://localhost:9200/_snapshot/backup/snapshot_index_account_001?wait_for_completion=true&pretty" -H 'Content-Type: application/json' -d'
+{
+  "indices": "squad-standard-index",
+  "ignore_unavailable": true,
+  "include_global_state": false,
+  "metadata": {
+    "taken_by": "Giuseppe",
+    "taken_because": "Backup of the index named squad-standard-index"
+  }
+}
+'
+#Dove snapshot_index_account_001 è il nome dello snapshot, squad-standard-index è il nome dell'indice
+
+
+#Per creare uno snapshot di un indice ElasticSearch specifico DA PYTHON, utilizzare il comando seguente.
+
+from elasticsearch import Elasticsearch
+
+config = {'host':'localhost', 'port':9200}
+es = Elasticsearch([config])
+
+'''supponiamo di aver chiamato l'indice squad-standard-index e di aver compiuto delle operazioni per riempirlo. Dopo averlo riempito:'''
+
+body = {
+  "indices": "squad-standard-index"
+}
+
+es.snapshot.create(repository='backup', snapshot='snapshot_index_account_002', body=body)
+
+#repository: il nome della repository; snapshot: il nome che vogliamo dare allo snapshot, body: #si specificano le informazioni, in particolarmodo il nome dell'indice che vogliamo salvare
+
+#Elencare tutte le snapshot disponibili nel repository denominato BACKUP.
+curl -X GET "http://localhost:9200/_cat/snapshots/backup?v&s=id&pretty"
+
+#Ecco l'output del comando:
+id                          status start_epoch start_time end_epoch  end_time duration indices successful_shards failed_shards total_shards
+snapshot_index_account_001               SUCCESS 1588350801  16:33:21   1588350801 16:33:21       0s       0                 0             0            0
+snapshot_index_account_002 SUCCESS 1588356621  18:10:21   1588356621 18:10:21    200ms       1                 1             0            1
+
+#Ripristino di un Snapshot
+
+#Ripristinare DA TERMINALE l'istantanea ElasticSearch denominata: SNAPSHOT_INDEX_ACCOUNT_001
+curl -X POST "http://192.168.100.7:9200/_snapshot/backup/snapshot_index_account_001/_restore?pretty"
+
+#Ripristinare DA PYTHON l'istantanea ElasticSearch denominata: SNAPSHOT_INDEX_ACCOUNT_001
+from elasticsearch import Elasticsearch
+
+config = {'host':'localhost', 'port':9200}
+es = Elasticsearch([config])
+
+es.ping()
+
+es.snapshot.restore(repository='backup', snapshot='snapshot_index_account_001')
+
+#Se è stato visualizzato il seguente messaggio di errore, è necessario chiudere l'indice #ElasticSearch prima di ripristinare lo snapshot.
+
+{
+  "error" : {
+    "root_cause" : [
+      {
+        "type" : "snapshot_restore_exception",
+        "reason" : "[backup:snapshot_index_account_001/Zfv3LmIoTbu9amZImqo15Q] cannot restore index [accounts] because an open index with same name already exists in the cluster. Either close or delete the existing index or restore the index under a different name by providing a rename pattern and replacement name"
+      }
+    ],
+    "type" : "snapshot_restore_exception",
+    "reason" : "[backup:snapshot_index_account_001/Zfv3LmIoTbu9amZImqo15Q] cannot restore index [accounts] because an open index with same name already exists in the cluster. Either close or delete the existing index or restore the index under a different name by providing a rename pattern and replacement name"
+  },
+  "status" : 500
+}
+
+#Per chiudere l'indice Elasticsearch, utilizzare il comando seguente.
+curl -X POST "http://localhost:9200/squad-standard-index/_close?pretty"
+
+#Per visualizzare tutti gli indici salvati:
+curl http://localhost:9200/_aliases
+
+#Per eliminare un indice (in questo caso squad-standard-index_2):
+curl -X DELETE "localhost:9200/squad-standard-index_2?pretty"
+
+
+
+

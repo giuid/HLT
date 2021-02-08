@@ -1,0 +1,9 @@
+
+#BUILD DB
+python build_db.py /home/giuseppe/Scrivania/Codice/HLT_Project/dati/tfidf/gnq/input /home/giuseppe/Scrivania/Codice/HLT_Project/dati/tfidf/gnq/data_base/db.db
+
+#INTERACTIVE
+python /home/giuseppe/Scrivania/HLT_Project/Retriver/DrQA/interactive.py --model /home/giuseppe/Scrivania/HLT_Project/dati/tfidf/gnq/tf-idf/articles_clean-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz
+
+#BUILD TFIDF
+python build_tfidf.py /home/giuseppe/Scrivania/HLT_Project/Retriver/Process_gnq/gnq_articles.db /home/giuseppe/Scrivania/HLT_Project/Retriver/DrQA
